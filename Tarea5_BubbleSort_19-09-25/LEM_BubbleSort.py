@@ -1,27 +1,16 @@
-def bubbleSort(arr, size):
-    for i in range(size - 1):
-        for j in range(size - i - 1):
+import random
+def bubblesort(arr):
+    n = len(arr)
+    for i in range(n):
+        swap = False
+        for j in range(0, n - i - 1):
             if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
+                swap = True
+        if not swap:
+            break       
+arr = [random.randint(1, 100) for _ in range(10)]
 
-def mostrarArreglo(arr, size):
-    for i in range(size):
-        print(arr[i], end=" ")
-    print()
-
-def main():
-    arr = [21, 13, 44, 32, 78, 2]
-    size = len(arr)
-
-    print("Lista original: ", end="")
-    mostrarArreglo(arr, size)
-
-    bubbleSort(arr, size)
-
-    print("Lista ordenada: ", end="")
-    mostrarArreglo(arr, size)
-
-if __name__ == "__main__":
-    main()
+print("Arreglo original:", arr)
+bubblesort(arr)
+print("Arreglo ordenado:", arr)
