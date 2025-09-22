@@ -2,42 +2,44 @@ using System;
 
 class Program
 {
-    static void BubbleSort(int[] arr, int size)
+    static void BubbleSort(int[] arr)
     {
-        for (int i = 0; i < size - 1; i++)
+        int n = arr.Length;
+        for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < size - i - 1; j++)
+            bool swap = false;
+            for (int j = 0; j < n - i - 1; j++)
             {
                 if (arr[j] > arr[j + 1])
                 {
                     int temp = arr[j];
                     arr[j] = arr[j + 1];
                     arr[j + 1] = temp;
+                    swap = true;
                 }
+            }
+            if (!swap)
+            {
+                break; 
             }
         }
     }
 
-    static void MostrarArreglo(int[] arr, int size)
+    static void Main()
     {
-        for (int i = 0; i < size; i++)
+        const int SIZE = 10;
+        int[] arr = new int[SIZE];
+        Random rnd = new Random();
+
+        for (int i = 0; i < SIZE; i++)
         {
-            Console.Write(arr[i] + " ");
+            arr[i] = rnd.Next(1, 101);
         }
-        Console.WriteLine();
-    }
 
-    static void Main(string[] args)
-    {
-        int[] arr = { 21, 13, 44, 32, 78, 2 };
-        int size = arr.Length;
+        Console.WriteLine("Arreglo original: " + string.Join(" ", arr));
 
-        Console.Write("Lista original: ");
-        MostrarArreglo(arr, size);
+        BubbleSort(arr);
 
-        BubbleSort(arr, size);
-
-        Console.Write("Lista ordenada: ");
-        MostrarArreglo(arr, size);
+        Console.WriteLine("Arreglo ordenado: " + string.Join(" ", arr));
     }
 }
