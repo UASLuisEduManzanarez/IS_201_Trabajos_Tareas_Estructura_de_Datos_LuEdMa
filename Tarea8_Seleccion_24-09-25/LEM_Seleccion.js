@@ -1,12 +1,11 @@
 function selection(a) {
     for (let i = 0; i < a.length; i++) {
-        let small = i; // índice del elemento más pequeño
+        let small = i; 
         for (let j = i + 1; j < a.length; j++) {
             if (a[small] > a[j]) {
-                small = j; // actualiza el índice del elemento más pequeño
+                small = j; 
             }
         }
-        // intercambia los elementos
         let temp = a[i];
         a[i] = a[small];
         a[small] = temp;
