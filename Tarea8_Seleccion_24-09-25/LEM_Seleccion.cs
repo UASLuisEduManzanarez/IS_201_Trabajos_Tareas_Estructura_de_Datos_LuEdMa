@@ -6,16 +6,15 @@ class Program
     {
         for (int i = 0; i < a.Length; i++)
         {
-            int small = i; // índice del elemento más pequeño
+            int small = i; 
             for (int j = i + 1; j < a.Length; j++)
             {
                 if (a[small] > a[j])
                 {
-                    small = j; // actualiza el índice del elemento más pequeño
+                    small = j; 
                 }
             }
 
-            // intercambia los elementos
             int temp = a[i];
             a[i] = a[small];
             a[small] = temp;
