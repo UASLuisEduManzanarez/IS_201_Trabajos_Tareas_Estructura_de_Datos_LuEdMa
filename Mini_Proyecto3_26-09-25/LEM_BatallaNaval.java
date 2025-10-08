@@ -1,3 +1,4 @@
+//Primera revision 26-09-2025 Manzanarez Ramos Luis Eduardo
 import java.util.Scanner;
 
 public class LEM_BatallaNaval {
