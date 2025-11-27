@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sudoku — Generador y Juego (con Ranking)</title>
+  <style>
+    :root { --cell:42px; }
+    body {
+      font-family: Inter, Roboto, Arial, sans-serif;
+      background: #f5f7fb;
+      padding: 18px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .app {
+      display: flex;
+      gap: 20px;
+      max-width: 1100px;
+      width: 100%;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(9, var(--cell));
+      grid-template-rows: repeat(9, var(--cell));
+      background: #fff;
+      padding: 8px;
+      border-radius: 10px;
+      box-shadow: 0 6px 22px rgba(10,10,20,0.06);
+    }
+
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 18px;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .cell.prefill { color: #0b0b0b; }
+    .cell.editable { color: #1e88e5; }
+    .cell.error { background: #ffdede; }
+
+    .thick-right { border-right: 3px solid #111; }
+    .thick-left  { border-left: 3px solid #111; }
+    .thick-top   { border-top: 3px solid #111; }
+    .thick-bottom{ border-bottom: 3px solid #111; }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 320px;
+    }
+
+    .card {
+      background: #fff;
+      padding: 12px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(10,10,20,0.06);
+    }
+
+    .row { display: flex; gap: 8px; align-items: center; }
+    .btn { padding: 8px 12px; border-radius: 8px; background: #1e88e5; color: #fff; border: 0; cursor: pointer; }
+    .btn.secondary { background: #efefef; color: #111; }
+    .kbd { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .num { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:#efefef; cursor:pointer }
+
+    h3 { margin: 0 0 8px 0; }
+    small { color: #666; }
+
+    ul#ranking { list-style: none; padding-left: 0; margin: 0; }
+    ul#ranking li { padding: 6px 0; border-bottom: 1px solid #eee; }
+
+    footer { margin-top: 12px; font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <div>
+      <div id="board" class="board card"></div>
+
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+        <button class="btn" id="check">Comprobar</button>
+        <button class="btn secondary" id="hint">Pista (-1 vida)</button>
+        <button class="btn secondary" id="erase">Borrar</button>
+        <button class="btn secondary" id="solve">Mostrar solución</button>
+      </div>
+    </div>
+
+    <div class="controls">
+
+      <div class="card">
+        <h3>Configuración</h3>
+        <div class="row">
+          <label for="level">Dificultad:</label>
+          <select id="level">
+            <option value="MF">Muy Fácil (36-44 pistas)</option>
+            <option value="F">Fácil (32-35 pistas)</option>
+            <option value="M">Medio (28-31 pistas)</option>
+            <option value="D">Difícil (24-27 pistas)</option>
+            <option value="MD">Muy Difícil (17-23 pistas)</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:8px;">
+          <label>Vidas:</label>
+          <input id="livesInput" type="number" min="1" max="10" value="5" style="width:80px" />
+          <small style="margin-left:8px;">Vidas por juego</small>
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:8px;">
+          <button class="btn" id="generate">Generar 5 Sudokus</button>
+          <button class="btn secondary" id="newGame">Empezar Juego</button>
+        </div>
+
+        <div style="margin-top:8px;"><small id="status">Estado: listo</small></div>
+      </div>
+
+      <div class="card">
+        <h3>Sudokus (5 por nivel)</h3>
+        <div id="puzzleList" style="display:flex; gap:8px; flex-wrap:wrap"></div>
+      </div>
+
+      <div class="card">
+        <h3>Números y Estado</h3>
+        <div class="kbd" id="numPad"></div>
+        <div style="margin-top:8px; text-align:left;">
+          <div>Vidas: <strong id="lives">5</strong></div>
+          <div>Puzzle #: <strong id="pidx">-</strong></div>
+          <div>Puntos: <strong id="points">0</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Ranking (Top 5)</h3>
+        <ul id="ranking"></ul>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <small>Generador simple por backtracking — los puzzles generados intentan garantizar unicidad de solución.</small>
+  </footer>
+
+  <script>
+    const difficultyRanges = {
+      MF: [36, 44],
+      F:  [32, 35],
+      M:  [28, 31],
+      D:  [24, 27],
+      MD: [17, 23]
+    };
+
+    const difficultyPoints = { MF:1, F:2, M:3, D:4, MD:5 };
+
+    let solved = null;        
+    let puzzle = null;        
+    let initial = null;       
+    let puzzlesFive = [];     
+    let selectedIndex = -1;   
+    let lives = 5;
+    let selectedCell = null; 
+    let points = 0;          
+    let levelActual = 'MF';
+
+
+    let ranking = JSON.parse(localStorage.getItem('sudokuRanking') || '[]');
+
+
+    const boardEl = document.getElementById('board');
+    const numPad = document.getElementById('numPad');
+    const status = document.getElementById('status');
+    const livesEl = document.getElementById('lives');
+    const pidxEl = document.getElementById('pidx');
+    const puzzleList = document.getElementById('puzzleList');
+    const pointsEl = document.getElementById('points');
+    const rankingEl = document.getElementById('ranking');
+
+ 
+    function buildGrid() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          if (c % 3 === 2) cell.classList.add('thick-right');
+          if (c % 3 === 0) cell.classList.add('thick-left');
+          if (r % 3 === 2) cell.classList.add('thick-bottom');
+          if (r % 3 === 0) cell.classList.add('thick-top');
+          cell.dataset.r = r; cell.dataset.c = c;
+          cell.addEventListener('click', () => selectCell(r, c));
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    buildGrid();
+
+    function render() {
+      const cells = boardEl.children;
+      for (let i = 0; i < 81; i++) {
+        const r = Math.floor(i / 9), c = i % 9;
+        const el = cells[i];
+        el.classList.remove('prefill', 'editable', 'error');
+        el.innerHTML = '';
+
+        const val = puzzle ? puzzle[r][c] : 0;
+        if (initial && initial[r][c] !== 0) {
+          el.classList.add('prefill');
+          el.textContent = initial[r][c];
+        } else if (val !== 0) {
+          el.classList.add('editable');
+          el.textContent = val;
+        }
+
+        if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+          el.style.background = '#e6f2ff';
+        } else {
+          el.style.background = '';
+        }
+      }
+    }
+
+    function selectCell(r, c) {
+      selectedCell = { r, c };
+      render();
+    }
+
+    for (let n = 1; n <= 9; n++) {
+      const b = document.createElement('div');
+      b.className = 'num';
+      b.textContent = n;
+      b.addEventListener('click', () => putNumber(n));
+      numPad.appendChild(b);
+    }
+    const er = document.createElement('div');
+    er.className = 'num';
+    er.textContent = '⌫';
+    er.addEventListener('click', () => putNumber(0));
+    numPad.appendChild(er);
+
+    function putNumber(n) {
+      if (!selectedCell) return status.innerText = 'Selecciona una celda primero';
+      const { r, c } = selectedCell;
+      if (initial && initial[r][c] !== 0) return status.innerText = 'No puedes cambiar una pista inicial';
+      puzzle[r][c] = n;
+      render();
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function makeEmpty() {
+      return Array.from({ length: 9 }, () => Array(9).fill(0));
+    }
+
+    function isSafe(board, r, c, val) {
+      for (let k = 0; k < 9; k++) if (board[r][k] === val || board[k][c] === val) return false;
+      const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (board[br + i][bc + j] === val) return false;
+      return true;
+    }
+
+    function fillBoard(board) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (board[r][c] === 0) {
+            const nums = [1,2,3,4,5,6,7,8,9]; shuffle(nums);
+            for (const n of nums) {
+              if (isSafe(board, r, c, n)) {
+                board[r][c] = n;
+                if (fillBoard(board)) return true;
+                board[r][c] = 0;
+              }
+            }
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function bcopy(b) { return b.map(r => r.slice()); }
+
+    function countSolutions(board, limit = 2) {
+      let count = 0;
+      function solve(b) {
+        if (count >= limit) return;
+        let found = false, rr = -1, cc = -1;
+        for (let i = 0; i < 9; i++) {
+          for (let j = 0; j < 9; j++) {
+            if (b[i][j] === 0) { found = true; rr = i; cc = j; break; }
+          }
+          if (found) break;
+        }
+        if (!found) { count++; return; }
+        for (let n = 1; n <= 9; n++) {
+          if (isSafe(b, rr, cc, n)) {
+            b[rr][cc] = n; solve(b); b[rr][cc] = 0; if (count >= limit) return;
+          }
+        }
+      }
+      const copy = bcopy(board);
+      solve(copy);
+      return count;
+    }
+
+    function makePuzzleFromSolution(sol, clues) {
+      const p = bcopy(sol);
+      const cells = Array.from({ length: 81 }, (_, i) => i);
+      shuffle(cells);
+      let removalsAllowed = 81 - clues;
+      for (const idx of cells) {
+        if (removalsAllowed <= 0) break;
+        const r = Math.floor(idx / 9), c = idx % 9;
+        const backup = p[r][c]; if (backup === 0) continue;
+        p[r][c] = 0;
+        const sols = countSolutions(p, 2);
+        if (sols !== 1) { p[r][c] = backup; }
+        else removalsAllowed--;
+      }
+      return p;
+    }
+
+    async function generateFive(level) {
+      levelActual = level;
+      const range = difficultyRanges[level];
+      puzzlesFive = [];
+      status.innerText = 'Generando... esto puede tardar algunos segundos';
+
+      for (let k = 0; k < 5; k++) {
+        let full;
+        while (true) { full = makeEmpty(); if (fillBoard(full)) break; }
+        const clues = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+        const p = makePuzzleFromSolution(full, clues);
+        puzzlesFive.push({ puzzle: p, solution: full, clues });
+        status.innerText = `Generados ${k+1}/5`;
+        await new Promise(r => setTimeout(r, 40));
+      }
+
+      status.innerText = 'Generación terminada';
+      buildPuzzleList();
+    }
+
+    function buildPuzzleList() {
+      puzzleList.innerHTML = '';
+      puzzlesFive.forEach((item, idx) => {
+        const b = document.createElement('button');
+        b.className = 'btn secondary';
+        b.textContent = `Puzzle ${idx+1} (${item.clues})`;
+        b.addEventListener('click', () => { selectedIndex = idx; pidxEl.textContent = idx+1; status.innerText = `Puzzle ${idx+1} seleccionado`; });
+        puzzleList.appendChild(b);
+      });
+    }
+
+    function startGame() {
+      if (selectedIndex < 0 || !puzzlesFive[selectedIndex]) return status.innerText = 'Selecciona primero un puzzle de la lista';
+      lives = Number(document.getElementById('livesInput').value) || 5;
+      livesEl.textContent = lives;
+
+      const chosen = puzzlesFive[selectedIndex];
+      puzzle = bcopy(chosen.puzzle);
+      solved = bcopy(chosen.solution);
+      initial = bcopy(chosen.puzzle);
+
+
+
+      pointsEl.textContent = points;
+      status.innerText = 'Juego iniciado';
+      render();
+    }
+
+    function checkBoard() {
+      if (!puzzle || !solved) return status.innerText = 'No hay juego activo';
+
+      let errors = 0, empties = 0;
+      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+        if (puzzle[r][c] === 0) empties++;
+        else if (puzzle[r][c] !== solved[r][c]) errors++;
+      }
+
+      const cells = boardEl.children;
+      for (let i = 0; i < 81; i++) {
+        const r = Math.floor(i / 9), c = i % 9;
+        if (initial[r][c] === 0 && puzzle[r][c] !== 0 && puzzle[r][c] !== solved[r][c]) cells[i].classList.add('error');
+        else cells[i].classList.remove('error');
+      }
+
+      if (errors > 0) {
+        lives--; livesEl.textContent = lives;
+        status.innerText = `Errores: ${errors}. Perdiste 1 vida.`;
+      } else if (empties === 0) {
+        points += difficultyPoints[levelActual] || 1;
+        pointsEl.textContent = points;
+        status.innerText = '¡Felicidades! Completaste el sudoku.';
+        saveScorePrompt(points);
+      } else {
+        status.innerText = `Sin errores detectados. Faltan ${empties} celdas.`;
+      }
+
+      if (lives <= 0) {
+        status.innerText = 'Se acabaron tus vidas.';
+        showRankingModal();
+      }
+    }
+
+    function giveHint() {
+      if (!puzzle || !solved) return status.innerText = 'No hay juego activo';
+      if (lives <= 1) return status.innerText = 'No tienes suficientes vidas para pedir pista';
+
+      const empties = [];
+      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) if (puzzle[r][c] === 0) empties.push({ r, c });
+      if (empties.length === 0) return status.innerText = 'No hay celdas vacías';
+
+      const chosen = empties[Math.floor(Math.random() * empties.length)];
+      puzzle[chosen.r][chosen.c] = solved[chosen.r][chosen.c];
+      lives--; livesEl.textContent = lives;
+      status.innerText = 'Pista aplicada (-1 vida)';
+      render();
+
+      if (lives <= 0) { status.innerText = 'Se acabaron tus vidas.'; showRankingModal(); }
+    }
+
+    function showSolution() {
+      if (!solved) return;
+      puzzle = bcopy(solved);
+      render();
+      status.innerText = 'Solución mostrada';
+    }
+
+    function saveScorePrompt(pointsValue) {
+      const name = prompt('Ingresa tu nombre para el ranking (dejar vacío = Anónimo):', '');
+      const entry = { name: (name && name.trim()) ? name.trim() : 'Anónimo', points: pointsValue };
+      ranking.push(entry);
+      ranking.sort((a, b) => b.points - a.points);
+      ranking = ranking.slice(0, 5);
+      localStorage.setItem('sudokuRanking', JSON.stringify(ranking));
+      renderRanking();
+    }
+
+    function renderRanking() {
+      rankingEl.innerHTML = '';
+      if (!ranking || ranking.length === 0) {
+        rankingEl.innerHTML = '<li>No hay puntuaciones aún</li>';
+        return;
+      }
+      ranking.forEach((e, i) => {
+        const li = document.createElement('li');
+        li.textContent = `#${i+1} — ${e.name}: ${e.points} pts`;
+        rankingEl.appendChild(li);
+      });
+    }
+
+    function showRankingModal() {
+
+      let text = '--- RANKING TOP 5 ---\n';
+      renderRanking();
+      ranking.forEach((e, i) => { text += `${i+1}. ${e.name} - ${e.points} pts\n`; });
+      text += '\nPresiona Aceptar para reiniciar el juego (se mantiene la generación actual).';
+      alert(text);
+      puzzle = null; solved = null; initial = null; selectedIndex = -1; pidxEl.textContent = '-'; render();
+    }
+
+
+    renderRanking();
+
+    document.getElementById('generate').addEventListener('click', () => {
+      const level = document.getElementById('level').value;
+      generateFive(level);
+    });
+
+    document.getElementById('newGame').addEventListener('click', () => {
+      startGame();
+    });
+
+    document.getElementById('check').addEventListener('click', () => checkBoard());
+    document.getElementById('hint').addEventListener('click', () => giveHint());
+    document.getElementById('erase').addEventListener('click', () => {
+      if (!selectedCell) return status.innerText = 'Selecciona una celda primero';
+      const { r, c } = selectedCell;
+      if (initial[r][c] !== 0) return status.innerText = 'No puedes borrar una pista inicial';
+      puzzle[r][c] = 0; render();
+    });
+    document.getElementById('solve').addEventListener('click', () => showSolution());
+
+    status.innerText = 'Listo. Selecciona dificultad y presiona "Generar 5 Sudokus"';
+
+  </script>
+</body>
+</html>
